@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import UAParser from "ua-parser-js";
 
 export async function GET(req: NextRequest) {
-  const ip =
-    req.headers.get("x-forwarded-for") || req.ip || "Unknown";
-  const userAgent = req.headers.get("user-agent") || "Unknown";
+  // Vercel sets the real IP in x-forwarded-for
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  const ip = forwardedFor ? forwardedFor.split(",")[0] : "Unknown";
 
+  const userAgent = req.headers.get("user-agent") || "Unknown";
   const parser = new UAParser(userAgent);
   const deviceInfo = parser.getResult();
 

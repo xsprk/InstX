@@ -16,7 +16,7 @@ You can preview and try the website live on Vercel here: [inst-x.vercel.app](ins
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/xsprk/instX.git
+git clone https://github.com/xsprk/InstX.git
 ```
 
 ### 2. Install dependencies

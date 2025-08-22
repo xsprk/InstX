@@ -9,20 +9,20 @@ This website allows you to easily download Instagram videos in MP4 format. Simpl
 
 _Note: Instagram Stories aren't supported._
 
-You can preview and try the website live on Vercel here: [instagram-reels-downloader-tau.vercel.app](https://instagram-reels-downloader-tau.vercel.app/)
+You can preview and try the website live on Vercel here: [inst-x.vercel.app](inst-x.vercel.app/)
 
 ## Getting Started
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/riad-azz/Instagram-reels-downloader.git
+git clone https://github.com/xsprk/instX.git
 ```
 
 ### 2. Install dependencies
 
 ```bash
-cd Instagram-reels-downloader
+cd instX
 npm install
 ```
 
@@ -59,7 +59,7 @@ curl -i "http://localhost:3000/api/video?postUrl=https://www.instagram.com/reel/
 {
   "status": "success",
   "data": {
-    "filename": "ig-downloader-1712666263.mp4",
+    "filename": "instX-710667.mp4",
     "width": "640",
     "height": "640",
     "videoUrl": "https://scontent.cdninstagram.com/o1/v/t16/f1/m84/E84E5DFC48EA8...etc"

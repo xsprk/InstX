@@ -1,12 +1,8 @@
-// visits/route.ts
-import db, { getVisits } from "@/lib/db";
+// src/app/api/admin/visits/route.ts
 import { NextResponse } from "next/server";
+import { getVisits } from "@/lib/db";
 
 export async function GET() {
-  try {
-    const visits = await getVisits(db);
-    return NextResponse.json(visits);
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to fetch visits" }, { status: 500 });
-  }
+  const visits = await getVisits();
+  return NextResponse.json(visits);
 }

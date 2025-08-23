@@ -1,133 +1,127 @@
-import { CheerioAPI } from "cheerio";
-import querystring from "querystring";
-import fetch from 'node-fetch';
 import { getTimedFilename } from "@/lib/utils";
-import { createBrotliDecompress } from 'zlib';
 import { VideoInfo } from "@/types";
 import { MediaData } from "./types";
 
-// Function to generate a video filename
-export const getIGVideoFileName = () =>
-  getTimedFilename("ig-downloader", "mp4");
+/** ----------------------------------------------------------------
+ * URL parsing & validation
+ * ---------------------------------------------------------------*/
+export type InstagramUrlInfo = { id: string; type: "post" | "reel" };
 
-// Function to process Instagram share URL and resolve it to the reel ID
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
-export const getPostIdFromUrl = async (postUrl: string): Promise<string> => {
+export const isValidInstagramURL = (postUrl: string): string => {
+  try {
+    const u = new URL(postUrl);
+    const hostOk = /^(?:www\.)?instagram\.com$/.test(u.hostname);
+    if (!hostOk) return "Not an instagram.com URL";
+
+    // Accept /p/{id}/, /reel/{id}/, /reels/{id}/ or /share/{token}/ (we will resolve)
+    const ok =
+      /^\/p\/[A-Za-z0-9_-]+\/?/.test(u.pathname) ||
+      /^\/reel[s]?\/[A-Za-z0-9_-]+\/?/.test(u.pathname) ||
+      /^\/share\/[A-Za-z0-9_-]+\/?/.test(u.pathname);
+
+    if (!ok) return "URL must be /p/{id} or /reel/{id} or /reels/{id}";
+    return "";
+  } catch {
+    return "Invalid URL";
+  }
+};
+
+async function resolveShareIfNeeded(postUrl: string): Promise<string> {
+  // If it's a share link, let Instagram redirect us to the final URL,
+  // then parse the resulting /p/{id} or /reel/{id}
   const shareRegex = /^https:\/\/(?:www\.)?instagram\.com\/share\/([a-zA-Z0-9_-]+)\/?/;
-  const postRegex = /^https:\/\/(?:www\.)?instagram\.com\/p\/([a-zA-Z0-9_-]+)\/?/;
-  const reelRegex = /^https:\/\/(?:www\.)?instagram\.com\/reels?\/([a-zA-Z0-9_-]+)\/?/;
+  if (!shareRegex.test(postUrl)) return postUrl;
 
-  if (shareRegex.test(postUrl)) {
-    console.log('Detected Share URL');
-    try {
-      const reelId = await fetchReelIdFromShareURL(postUrl);
-      return reelId;
-    } catch (error) {
-      console.error('Error resolving share URL');
-      throw error;
-    }
-  }
+  const res = await fetch(postUrl, {
+    redirect: "follow",
+    headers: { "User-Agent": UA },
+  });
+  // If fetch follows to a final URL, use it; fallback to original
+  return res.url || postUrl;
+}
 
-  const postMatch = postUrl.match(postRegex);
-  if (postMatch?.[1]) {
-    console.log('Matched Post ID');
-    return postMatch[1];
-  }
+export const parseInstagramUrl = async (postUrl: string): Promise<InstagramUrlInfo> => {
+  const err = isValidInstagramURL(postUrl);
+  if (err) throw new Error(err);
 
-  const reelMatch = postUrl.match(reelRegex);
-  if (reelMatch?.[1]) {
-    console.log('Matched Reel ID');
-    return reelMatch[1];
-  }
+  const finalUrl = await resolveShareIfNeeded(postUrl);
 
-  console.error('No match found');
-  throw new Error('Unable to extract ID');
+  const postMatch = finalUrl.match(
+    /^https:\/\/(?:www\.)?instagram\.com\/p\/([A-Za-z0-9_-]+)\/?/
+  );
+  if (postMatch) return { id: postMatch[1], type: "post" };
+
+  const reelMatch = finalUrl.match(
+    /^https:\/\/(?:www\.)?instagram\.com\/reels?\/([A-Za-z0-9_-]+)\/?/
+  );
+  if (reelMatch) return { id: reelMatch[1], type: "reel" };
+
+  throw new Error("Invalid Instagram URL. Expected /p/{id} or /reel/{id}.");
 };
 
+export const getPathForInstagramInfo = (info: InstagramUrlInfo): string =>
+  info.type === "reel" ? `reel/${info.id}` : `p/${info.id}`;
 
-
-
-// Function to fetch and extract the reel ID from a share URL
-export const fetchReelIdFromShareURL = async (shareUrl: string): Promise<string> => {
-  try {
-    const response = await fetch(shareUrl, { method: 'GET', redirect: 'follow' });
-
-    if (!response.ok) {
-      console.error("Failed to fetch share URL");
-      throw new Error("Failed to fetch share URL");
+/** ----------------------------------------------------------------
+ * Normalized media type for API consumers
+ * ---------------------------------------------------------------*/
+export type NormalizedMedia =
+  | {
+      kind: "video";
+      url: string;
+      width?: number;
+      height?: number;
+      filename: string;
     }
+  | {
+      kind: "image";
+      url: string;
+      width?: number;
+      height?: number;
+      filename: string;
+    };
 
-    console.log("Final URL after redirects:", response.url);
+export const getIGVideoFileName = () => getTimedFilename("ig-downloader", "mp4");
+export const getIGImageFileName = () => getTimedFilename("ig-image", "jpg");
 
-    const match = response.url.match(/reel\/([a-zA-Z0-9_-]+)/);
-    // console.log("match:", match);
+/** ----------------------------------------------------------------
+ * Page JSON fetch (first try) and GraphQL fallback
+ * ---------------------------------------------------------------*/
+async function fetchPageJSON(path: string) {
+  const url = `https://www.instagram.com/${path}/?__a=1&__d=dis`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": UA,
+      Accept: "application/json,text/*;q=0.9,*/*;q=0.8",
+    },
+  });
+  if (!res.ok) throw new Error(`Page JSON fetch failed: ${res.status}`);
+  return res.json();
+}
 
-    if (!match || !match[1]) {
-      throw new Error("Reel ID not found in URL");
-    }
-
-    return match[1];
-  } catch (error) {
-    console.error("Error fetching or parsing share URL:", error);
-    throw error; // Re-throw error to allow the caller to handle it.
-  }
-};
-
-
-// Function to fetch and decompress Instagram's Brotli-compressed response
-export const fetchAndDecompress = async (url: string) => {
-  try {
-    const response = await fetch(url, { method: 'GET', redirect: 'follow' });
-
-    if (!response.body) {
-      throw new Error("No response body.");
-    }
-
-    const decompressedChunks: Uint8Array[] = [];
-    const brotliDecompressor = createBrotliDecompress();
-
-    return new Promise<Uint8Array>((resolve, reject) => {
-      response.body?.on('data', (chunk: Buffer) => {
-        try {
-          // Convert Buffer directly to Uint8Array safely
-          const uint8ArrayChunk = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-          decompressedChunks.push(uint8ArrayChunk);
-        } catch (error) {
-          reject(error);
-        }
-      });
-
-      response.body?.on('end', () => {
-        const combinedBuffer = Buffer.concat(decompressedChunks);
-        resolve(new Uint8Array(combinedBuffer));
-      });
-
-      response.body?.on('error', reject);
-    });
-  } catch (error) {
-    console.error("Failed to decompress response body", error);
-    throw error;
-  }
-};
-
-// Function to prepare GraphQL request payload
+/**
+ * GraphQL body used by instagram.com web client for post details.
+ * NOTE: doc_id & shape can change over time. If it breaks, update here.
+ */
 export const encodeGraphqlRequestData = (shortcode: string) => {
-  const requestData = {
+  // This payload mirrors the web client “PolarisPost…” query variables.
+  return {
     av: "0",
     __d: "www",
     __user: "0",
     __a: "1",
-    __req: "3",
+    __req: "1",
     __hs: "19624.HYP:instagram_web_pkg.2.1..0.0",
-    dpr: "3",
+    dpr: "1",
     __ccg: "UNKNOWN",
     __rev: "1008824440",
-    __s: "xf44ne:zhh75g:xr51e7",
-    __hsi: "7282217488877343271",
+    __hsi: "0",
     __dyn:
-      "7xeUmwlEnwn8K2WnFw9-2i5U4e0yoW3q32360CEbo1nEhw2nVE4W0om78b87C0yE5ufz81s8hwGwQwoEcE7O2l0Fwqo31w9a9x-0z8-U2zxe2GewGwso88cobEaU2eUlwhEe87q7-0iK2S3qazo7u1xwIw8O321LwTwKG1pg661pwr86C1mwraCg",
-    __csr:
-      "gZ3yFmJkillQvV6ybimnG8AmhqujGbLADgjyEOWz49z9XDlAXBJpC7Wy-vQTSvUGWGh5u8KibG44dBiigrgjDxGjU0150Q0848azk48N09C02IR0go4SaR70r8owyg9pU0V23hwiA0LQczA48S0f-x-27o05NG0fkw",
+      "7xeUmwlEnwn8K2WnFw9-2i5U4e0yoW3q32360CEbo1nEhw2nVE4W0om78-0iS2S2e1FwnU1eE48hxG1pg661pwr86C1mwraCw",
+    __csr: "",
     __comet_req: "7",
     lsd: "AVqbxe3J_YA",
     jazoest: "2957",
@@ -137,93 +131,244 @@ export const encodeGraphqlRequestData = (shortcode: string) => {
     fb_api_caller_class: "RelayModern",
     fb_api_req_friendly_name: "PolarisPostActionLoadPostQueryQuery",
     variables: JSON.stringify({
-      shortcode: shortcode,
-      fetch_comment_count: "null",
-      fetch_related_profile_media_count: "null",
-      parent_comment_count: "null",
-      child_comment_count: "null",
-      fetch_like_count: "null",
-      fetch_tagged_user_count: "null",
-      fetch_preview_comment_count: "null",
-      has_threaded_comments: "false",
-      hoisted_comment_id: "null",
-      hoisted_reply_id: "null",
+      shortcode,
+      fetch_comment_count: 0,
+      fetch_related_profile_media_count: 0,
+      parent_comment_count: 0,
+      child_comment_count: 0,
+      has_threaded_comments: true,
+      hoisted_comment_id: null,
+      hoisted_reply_id: null,
     }),
-    server_timestamps: "true",
-    doc_id: "10015901848480474",
+    // doc_id used by the web client for the post load query (subject to change)
+    doc_id: "8845758582119845",
   };
-  const encoded = querystring.stringify(requestData);
-  return encoded;
 };
 
-// Function to format GraphQL data into a usable video file JSON
-export const formatGraphqlJson = (data: MediaData) => {
+async function fetchGraphQL(shortcode: string) {
+  const body = new URLSearchParams(encodeGraphqlRequestData(shortcode)).toString();
+  const res = await fetch("https://www.instagram.com/api/graphql", {
+    method: "POST",
+    headers: {
+      "User-Agent": UA,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+  if (!res.ok) throw new Error(`GraphQL fetch failed: ${res.status}`);
+  return res.json() as Promise<{
+    data?: { xdt_shortcode_media?: MediaData };
+  }>;
+}
+
+/** ----------------------------------------------------------------
+ * Normalizers (Page JSON & GraphQL JSON -> NormalizedMedia[])
+ * ---------------------------------------------------------------*/
+function normalizeFromPageJSON(json: any): NormalizedMedia[] {
+  // Page JSON shapes vary (web vs. mweb). Handle the common structures.
+  // Prefer graphql.shortcode_media if present.
+  const sm =
+    json?.graphql?.shortcode_media ??
+    json?.items?.[0] ??
+    json?.data?.xdt_shortcode_media;
+
+  if (!sm) return [];
+
+  // Carousel (sidecar)
+  const sidecar =
+    sm?.edge_sidecar_to_children?.edges ||
+    sm?.carousel_media?.map((m: any) => ({ node: m })) ||
+    [];
+
+  if (Array.isArray(sidecar) && sidecar.length > 0) {
+    const items: NormalizedMedia[] = [];
+    for (const edge of sidecar) {
+      const node = edge?.node || edge; // some shapes are flat
+      if (!node) continue;
+
+      // video?
+      const videoUrl = node?.video_url || node?.video_versions?.[0]?.url;
+      if (videoUrl) {
+        items.push({
+          kind: "video",
+          url: videoUrl,
+          width: node?.dimensions?.width || node?.original_width,
+          height: node?.dimensions?.height || node?.original_height,
+          filename: getIGVideoFileName(),
+        });
+        continue;
+      }
+
+      // image?
+      const img =
+        node?.display_url ||
+        node?.display_resources?.slice(-1)?.[0]?.src ||
+        node?.image_versions2?.candidates?.[0]?.url;
+      if (img) {
+        items.push({
+          kind: "image",
+          url: img,
+          width: node?.dimensions?.width || node?.original_width,
+          height: node?.dimensions?.height || node?.original_height,
+          filename: getIGImageFileName(),
+        });
+      }
+    }
+    return items;
+  }
+
+  // Single video (reel / video post)
+  const videoUrl = sm?.video_url || sm?.video_versions?.[0]?.url;
+  if (videoUrl) {
+    return [
+      {
+        kind: "video",
+        url: videoUrl,
+        width: sm?.dimensions?.width || sm?.original_width,
+        height: sm?.dimensions?.height || sm?.original_height,
+        filename: getIGVideoFileName(),
+      },
+    ];
+  }
+
+  // Single image
+  const img =
+    sm?.display_url ||
+    sm?.display_resources?.slice(-1)?.[0]?.src ||
+    sm?.image_versions2?.candidates?.[0]?.url;
+
+  if (img) {
+    return [
+      {
+        kind: "image",
+        url: img,
+        width: sm?.dimensions?.width || sm?.original_width,
+        height: sm?.dimensions?.height || sm?.original_height,
+        filename: getIGImageFileName(),
+      },
+    ];
+  }
+
+  return [];
+}
+
+function normalizeFromGraphQL(data: MediaData): NormalizedMedia[] {
+  // GraphQL MediaData from your src/features/instagram/types.ts
+  // It covers both single media and sidecars.
+  const sidecar = data?.edge_sidecar_to_children?.edges || [];
+  if (Array.isArray(sidecar) && sidecar.length > 0) {
+    const items: NormalizedMedia[] = [];
+    for (const edge of sidecar) {
+      const node: any = edge?.node;
+      if (!node) continue;
+      if (node?.is_video && node?.video_url) {
+        items.push({
+          kind: "video",
+          url: node.video_url,
+          width: node?.dimensions?.width,
+          height: node?.dimensions?.height,
+          filename: getIGVideoFileName(),
+        });
+      } else {
+        const img =
+          node?.display_url ||
+          node?.display_resources?.slice(-1)?.[0]?.src;
+        if (img) {
+          items.push({
+            kind: "image",
+            url: img,
+            width: node?.dimensions?.width,
+            height: node?.dimensions?.height,
+            filename: getIGImageFileName(),
+          });
+        }
+      }
+    }
+    return items;
+  }
+
+  if (data?.is_video && data?.video_url) {
+    return [
+      {
+        kind: "video",
+        url: data.video_url,
+        width: data?.dimensions?.width,
+        height: data?.dimensions?.height,
+        filename: getIGVideoFileName(),
+      },
+    ];
+  }
+
+  const img =
+    (data as any)?.display_url ||
+    (data as any)?.display_resources?.slice(-1)?.[0]?.src;
+  if (img) {
+    return [
+      {
+        kind: "image",
+        url: img,
+        width: data?.dimensions?.width,
+        height: data?.dimensions?.height,
+        filename: getIGImageFileName(),
+      },
+    ];
+  }
+
+  return [];
+}
+
+/** ----------------------------------------------------------------
+ * Public: fetch + normalize (Page JSON first, GraphQL as fallback)
+ * ---------------------------------------------------------------*/
+export async function fetchAndNormalizeInstagramMedia(
+  postUrl: string
+): Promise<NormalizedMedia[]> {
+  const info = await parseInstagramUrl(postUrl);
+  const path = getPathForInstagramInfo(info);
+
+  // 1) Page JSON (fast path)
+  try {
+    const pageJson = await fetchPageJSON(path);
+    const items = normalizeFromPageJSON(pageJson);
+    if (items.length > 0) return items;
+  } catch {
+    // fall through to GraphQL
+  }
+
+  // 2) GraphQL fallback
+  try {
+    const gql = await fetchGraphQL(info.id);
+    const media = gql?.data?.xdt_shortcode_media;
+    if (media) {
+      const items = normalizeFromGraphQL(media);
+      if (items.length > 0) return items;
+    }
+  } catch {
+    // ignore, fail below
+  }
+
+  // Nothing found
+  return [];
+}
+
+/** ----------------------------------------------------------------
+ * Legacy helpers kept for compatibility with existing imports
+ * ---------------------------------------------------------------*/
+export const formatGraphqlJson = (data: MediaData): VideoInfo => {
+  // Legacy single-video shape (kept to avoid breaking other imports)
+  // Prefer using fetchAndNormalizeInstagramMedia instead.
   const filename = getIGVideoFileName();
-  const width = data.dimensions.width.toString();
-  const height = data.dimensions.height.toString();
-  const videoUrl = data.video_url;
-
-  const videoJson: VideoInfo = {
-    filename,
-    width,
-    height,
-    videoUrl,
-  };
-
-  return videoJson;
+  const width = (data.dimensions?.width ?? 0).toString();
+  const height = (data.dimensions?.height ?? 0).toString();
+  const videoUrl = (data as any)?.video_url ?? "";
+  return { filename, width, height, videoUrl };
 };
 
-// Function to format video data from Instagram page meta tags
-export const formatPageJson = (postHtml: CheerioAPI) => {
-  const videoElement = postHtml("meta[property='og:video']");
-
-  if (videoElement.length === 0) {
-    return null;
-  }
-
-  const videoUrl = videoElement.attr("content");
-  if (!videoUrl) return null;
-
-  const width =
-    postHtml("meta[property='og:video:width']").attr("content") ?? "";
-  const height =
-    postHtml("meta[property='og:video:height']").attr("content") ?? "";
-
+export const formatPageJson = (json: any): VideoInfo => {
+  const sm = json?.graphql?.shortcode_media;
   const filename = getIGVideoFileName();
-
-  const videoJson: VideoInfo = {
-    filename,
-    width,
-    height,
-    videoUrl,
-  };
-
-  return videoJson;
-};
-
-// Function to validate Instagram URLs
-export const isValidInstagramURL = (postUrl: string) => {
-  if (!postUrl) {
-    return "Instagram URL was not provided";
-  }
-
-  if (!postUrl.includes("instagram.com/")) {
-    return "Invalid URL does not contain Instagram domain";
-  }
-
-  if (!postUrl.startsWith("https://")) {
-    return 'Invalid URL it should start with "https://www.instagram.com..."';
-  }
-
-  const postRegex =
-    /^https:\/\/(?:www\.)?instagram\.com\/p\/([a-zA-Z0-9_-]+)\/?/;
-
-  const reelRegex =
-    /^https:\/\/(?:www\.)?instagram\.com\/reels?\/([a-zA-Z0-9_-]+)\/?/;
-
-  if (!postRegex.test(postUrl) && !reelRegex.test(postUrl)) {
-    return "URL does not match Instagram post or reel";
-  }
-
-  return "";
+  const width = (sm?.dimensions?.width ?? 0).toString();
+  const height = (sm?.dimensions?.height ?? 0).toString();
+  const videoUrl = sm?.video_url ?? "";
+  return { filename, width, height, videoUrl };
 };

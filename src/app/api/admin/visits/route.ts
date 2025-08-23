@@ -1,4 +1,5 @@
-// src/app/api/admin/visits/route.ts
+- import db from "@/src/lib/db"
++ import db from "@/lib/db"// src/app/api/admin/visits/route.ts
 import { NextResponse } from "next/server";
 import { getVisits } from "@/src/lib/db"; // <-- adjust this to your db helper
 

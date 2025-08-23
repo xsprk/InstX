@@ -1,3 +1,5 @@
+- import db from "@/src/lib/db"
++ import db from "@/lib/db"
 import { saveVisit } from "@/src/lib/db";
 import useragent from "useragent";
 

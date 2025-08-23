@@ -7,15 +7,6 @@ import {
   isValidInstagramURL,
 } from "@/features/instagram/utils";
 
-/**
- * Response shape:
- * {
- *   status: "success",
- *   data: {
- *     items: Array<{ kind: "video" | "image"; url: string; width?: number; height?: number; filename: string; }>
- *   }
- * }
- */
 export async function GET(request: Request) {
   if (!INSTAGRAM_CONFIGS.enableServerAPI) {
     const notImplementedResponse = makeErrorResponse("Not Implemented");
@@ -45,7 +36,6 @@ export async function GET(request: Request) {
     const response = makeSuccessResponse({ items });
     return NextResponse.json(response, { status: 200 });
   } catch (error: any) {
-    // Centralized error handling similar to existing helpers
     if (error instanceof HTTPError) {
       const httpErrorResponse = makeErrorResponse(error.message);
       return NextResponse.json(httpErrorResponse, { status: error.status });

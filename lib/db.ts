@@ -1,49 +1,42 @@
 // lib/db.ts
-// A clean db helper that:
-//  - exports a PrismaClient as default (if you use Prisma elsewhere)
-//  - provides file-backed saveVisit/getVisits for simple visits storage
-// This avoids the malformed JSON block that was previously present.
-
 import { PrismaClient } from "@prisma/client";
 import fs from "fs";
 import path from "path";
 
+// Prisma client (still available for other DB operations)
 const db = new PrismaClient();
 export default db;
 
-// Store visits as JSON in <project-root>/data/visits.json
+// File path inside /data folder
 const filePath = path.join(process.cwd(), "data", "visits.json");
 
-/**
- * Save a visit row to data/visits.json
- * row: any object (e.g. { ua: '...', time: new Date().toISOString() })
- */
-export async function saveVisit(row: any) {
+// helper to read JSON file safely
+function readJson(file: string): any[] {
+  if (!fs.existsSync(file)) return [];
   try {
-    // ensure directory exists
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-
-    let data: any[] = [];
-    if (fs.existsSync(filePath)) {
-      data = JSON.parse(fs.readFileSync(filePath, "utf8"));
-      if (!Array.isArray(data)) data = [];
-    }
-    data.push(row);
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-    return row;
-  } catch (err) {
-    throw err;
+    const raw = fs.readFileSync(file, "utf8");
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
   }
 }
 
-/** Return the list of saved visits (or [] if none) */
-export async function getVisits() {
-  try {
-    if (!fs.existsSync(filePath)) return [];
-    const raw = fs.readFileSync(filePath, "utf8");
-    const data = JSON.parse(raw);
-    return Array.isArray(data) ? data : [];
-  } catch (err) {
-    throw err;
-  }
+// helper to write JSON file safely
+function writeJson(file: string, data: any[]) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+}
+
+// Save a visit into /data/visits.json
+export async function saveVisitData(row: any) {
+  const data = readJson(filePath);
+  data.push(row);
+  writeJson(filePath, data);
+  return row;
+}
+
+// Get all visits from /data/visits.json
+export async function getVisitsData() {
+  return readJson(filePath);
 }

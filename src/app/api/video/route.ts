@@ -1,6 +1,4 @@
-- import db from "@/src/lib/db"
-+ import db from "@/lib/db"
-import { saveVisit } from "@/src/lib/db";
+import { saveVisit } from "@/lib/db";
 import useragent from "useragent";
 
 const ip = req.headers.get("x-forwarded-for") || "unknown";

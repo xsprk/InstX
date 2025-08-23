@@ -1,22 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { fetchInstagramMedia, MediaItem } from "../utils";
+import { fetchAndNormalizeInstagramMedia, MediaItem, isValidInstagramURL } from "../utils";
 
-export default function InstagramForm() {
+export default function InstagramVideoForm() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [error, setError] = useState("");
 
-  const handleDownload = async (e: React.FormEvent) => {
+  const handleFetch = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
     setMedia([]);
 
+    const errMsg = isValidInstagramURL(url);
+    if (errMsg) {
+      setError(errMsg);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const result = await fetchInstagramMedia(url);
+      const result = await fetchAndNormalizeInstagramMedia(url);
       setMedia(result);
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -27,10 +34,8 @@ export default function InstagramForm() {
 
   return (
     <div className="max-w-lg mx-auto mt-10 p-6 bg-white shadow rounded-xl">
-      <h1 className="text-2xl font-bold mb-4 text-center">
-        Instagram Downloader
-      </h1>
-      <form onSubmit={handleDownload} className="flex gap-2">
+      <h1 className="text-2xl font-bold mb-4 text-center">Instagram Downloader</h1>
+      <form onSubmit={handleFetch} className="flex gap-2">
         <input
           type="text"
           placeholder="Paste Instagram link..."
@@ -50,7 +55,6 @@ export default function InstagramForm() {
 
       {error && <p className="text-red-500 mt-4">{error}</p>}
 
-      {/* Results */}
       {media.length > 0 && (
         <div className="mt-6 space-y-6">
           {media.map((item, index) => (

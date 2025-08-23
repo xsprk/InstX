@@ -14,7 +14,6 @@ await saveVisit({
   os: ua.os.toString(),
   device: ua.device.toString(),
 });
-import { NextResponse } from "next/server";
 import { HTTPError } from "@/lib/errors";
 import { makeErrorResponse, makeSuccessResponse } from "@/lib/http";
 import { INSTAGRAM_CONFIGS } from "@/features/instagram/constants";

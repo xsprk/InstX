@@ -1,6 +1,6 @@
 import { getTimedFilename } from "@/lib/utils";
 import { VideoInfo } from "@/types";
-import { MediaData } from "./types";
+import { MediaData } from "../instagram/types";
 
 /** ----------------------------------------------------------------
  * URL parsing & validation
@@ -16,7 +16,7 @@ export const isValidInstagramURL = (postUrl: string): string => {
     const hostOk = /^(?:www\.)?instagram\.com$/.test(u.hostname);
     if (!hostOk) return "Not an instagram.com URL";
 
-    // Accept /p/{id}/, /reel/{id}/, /reels/{id}/ or /share/{token}/ (we will resolve)
+    // Accept /p/{id}/, /reel/{id}/, /reels/{id}/ or /share/{token}/
     const ok =
       /^\/p\/[A-Za-z0-9_-]+\/?/.test(u.pathname) ||
       /^\/reel[s]?\/[A-Za-z0-9_-]+\/?/.test(u.pathname) ||
@@ -30,8 +30,6 @@ export const isValidInstagramURL = (postUrl: string): string => {
 };
 
 async function resolveShareIfNeeded(postUrl: string): Promise<string> {
-  // If it's a share link, let Instagram redirect us to the final URL,
-  // then parse the resulting /p/{id} or /reel/{id}
   const shareRegex = /^https:\/\/(?:www\.)?instagram\.com\/share\/([a-zA-Z0-9_-]+)\/?/;
   if (!shareRegex.test(postUrl)) return postUrl;
 
@@ -39,7 +37,6 @@ async function resolveShareIfNeeded(postUrl: string): Promise<string> {
     redirect: "follow",
     headers: { "User-Agent": UA },
   });
-  // If fetch follows to a final URL, use it; fallback to original
   return res.url || postUrl;
 }
 
@@ -107,7 +104,6 @@ async function fetchPageJSON(path: string) {
  * NOTE: doc_id & shape can change over time. If it breaks, update here.
  */
 export const encodeGraphqlRequestData = (shortcode: string) => {
-  // This payload mirrors the web client “PolarisPost…” query variables.
   return {
     av: "0",
     __d: "www",
@@ -140,8 +136,7 @@ export const encodeGraphqlRequestData = (shortcode: string) => {
       hoisted_comment_id: null,
       hoisted_reply_id: null,
     }),
-    // doc_id used by the web client for the post load query (subject to change)
-    doc_id: "8845758582119845",
+    doc_id: "8845758582119845", // may need updating in future
   };
 };
 
@@ -165,8 +160,6 @@ async function fetchGraphQL(shortcode: string) {
  * Normalizers (Page JSON & GraphQL JSON -> NormalizedMedia[])
  * ---------------------------------------------------------------*/
 function normalizeFromPageJSON(json: any): NormalizedMedia[] {
-  // Page JSON shapes vary (web vs. mweb). Handle the common structures.
-  // Prefer graphql.shortcode_media if present.
   const sm =
     json?.graphql?.shortcode_media ??
     json?.items?.[0] ??
@@ -183,10 +176,9 @@ function normalizeFromPageJSON(json: any): NormalizedMedia[] {
   if (Array.isArray(sidecar) && sidecar.length > 0) {
     const items: NormalizedMedia[] = [];
     for (const edge of sidecar) {
-      const node = edge?.node || edge; // some shapes are flat
+      const node = edge?.node || edge;
       if (!node) continue;
 
-      // video?
       const videoUrl = node?.video_url || node?.video_versions?.[0]?.url;
       if (videoUrl) {
         items.push({
@@ -199,11 +191,11 @@ function normalizeFromPageJSON(json: any): NormalizedMedia[] {
         continue;
       }
 
-      // image?
       const img =
         node?.display_url ||
         node?.display_resources?.slice(-1)?.[0]?.src ||
         node?.image_versions2?.candidates?.[0]?.url;
+
       if (img) {
         items.push({
           kind: "image",
@@ -253,8 +245,6 @@ function normalizeFromPageJSON(json: any): NormalizedMedia[] {
 }
 
 function normalizeFromGraphQL(data: MediaData): NormalizedMedia[] {
-  // GraphQL MediaData from your src/features/instagram/types.ts
-  // It covers both single media and sidecars.
   const sidecar = data?.edge_sidecar_to_children?.edges || [];
   if (Array.isArray(sidecar) && sidecar.length > 0) {
     const items: NormalizedMedia[] = [];
@@ -347,7 +337,6 @@ export async function fetchAndNormalizeInstagramMedia(
     // ignore, fail below
   }
 
-  // Nothing found
   return [];
 }
 
@@ -355,8 +344,6 @@ export async function fetchAndNormalizeInstagramMedia(
  * Legacy helpers kept for compatibility with existing imports
  * ---------------------------------------------------------------*/
 export const formatGraphqlJson = (data: MediaData): VideoInfo => {
-  // Legacy single-video shape (kept to avoid breaking other imports)
-  // Prefer using fetchAndNormalizeInstagramMedia instead.
   const filename = getIGVideoFileName();
   const width = (data.dimensions?.width ?? 0).toString();
   const height = (data.dimensions?.height ?? 0).toString();

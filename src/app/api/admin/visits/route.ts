@@ -1,14 +1,11 @@
-- import db from "@/src/lib/db"
-+ import db from "@/lib/db"// src/app/api/admin/visits/route.ts
+import db, { getVisits } from "@/lib/db";
 import { NextResponse } from "next/server";
-import { getVisits } from "@/src/lib/db"; // <-- adjust this to your db helper
 
-export async function GET(req: Request) {
-  const key = req.headers.get("x-admin-key");
-  if (key !== process.env.ADMIN_PASSWORD) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET() {
+  try {
+    const visits = await getVisits(db);
+    return NextResponse.json(visits);
+  } catch (error) {
+    return NextResponse.json({ error: "Failed to fetch visits" }, { status: 500 });
   }
-
-  const rows = await getVisits();
-  return NextResponse.json({ rows });
 }

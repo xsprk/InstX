@@ -1,20 +1,13 @@
 // features/instagram/utils.ts
 import axios from "axios";
 
-export type MediaItem = {
-  url: string;
-  type: "video" | "image";
-};
+export type MediaItem = { url: string; type: "video" | "image" };
 
-// Validate Instagram URL
 export function isValidInstagramURL(url: string): string | null {
-  if (!url.match(/instagram\.com\/(p|reel|tv)\//)) {
-    return "Invalid Instagram URL";
-  }
+  if (!url.match(/instagram\.com\/(p|reel|tv)\//)) return "Invalid Instagram URL";
   return null;
 }
 
-// Fetch Instagram media
 export async function fetchAndNormalizeInstagramMedia(instaUrl: string): Promise<MediaItem[]> {
   try {
     const match = instaUrl.match(/\/(p|reel|tv)\/([^/?]+)/);
@@ -25,35 +18,26 @@ export async function fetchAndNormalizeInstagramMedia(instaUrl: string): Promise
 
     const { data } = await axios.get(jsonUrl, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Mobile; InstagramDownloader)",
         "Accept-Language": "en-US,en;q=0.9",
       },
     });
 
     const media: MediaItem[] = [];
     const mediaObj = data?.data?.shortcode_media;
+    if (!mediaObj) throw new Error("No media found");
 
-    if (!mediaObj) throw new Error("Could not fetch post data");
-
-    // Carousel (multiple media)
     if (mediaObj.edge_sidecar_to_children) {
       mediaObj.edge_sidecar_to_children.edges.forEach((edge: any) => {
-        if (edge.node.is_video) {
-          media.push({ url: edge.node.video_url, type: "video" });
-        } else {
-          media.push({ url: edge.node.display_url, type: "image" });
-        }
+        media.push(edge.node.is_video ? { url: edge.node.video_url, type: "video" } : { url: edge.node.display_url, type: "image" });
       });
     } else {
-      // Single media
-      if (mediaObj.is_video) media.push({ url: mediaObj.video_url, type: "video" });
-      else media.push({ url: mediaObj.display_url, type: "image" });
+      media.push(mediaObj.is_video ? { url: mediaObj.video_url, type: "video" } : { url: mediaObj.display_url, type: "image" });
     }
 
     return media;
   } catch (err: any) {
-    console.error("fetchAndNormalizeInstagramMedia error:", err.message);
+    console.error(err);
     throw new Error("Failed to fetch Instagram media");
   }
 }

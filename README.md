@@ -1,4 +1,4 @@
-# Instagram Videos Downloader
+# Instagram Downloader
 
 A simple website/API for downloading Instagram videos, built with Next.js. It works seamlessly and allows you to download videos with no hassle.
 

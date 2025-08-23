@@ -1,15 +1,13 @@
+// src/app/api/admin/visits/route.ts
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/db";
+import { getVisits } from "@/src/lib/db"; // <-- adjust this to your db helper
 
 export async function GET(req: Request) {
-  if ((req.headers.get("x-admin-key") ?? "") !== process.env.ADMIN_KEY) {
+  const key = req.headers.get("x-admin-key");
+  if (key !== process.env.ADMIN_PASSWORD) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { data, error } = await supabase
-    .from("visits")
-    .select("*")
-    .order("time", { ascending: false })
-    .limit(500);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ rows: data }, { status: 200 });
+
+  const rows = await getVisits();
+  return NextResponse.json({ rows });
 }

@@ -1,19 +1,6 @@
-// video/route.ts
-import db, { saveVisit } from "@/lib/db";
-import useragent from "useragent";
+// src/app/api/video/route.ts
+import { saveVisit } from "@/lib/db";
 import { NextResponse } from "next/server";
-
-const ip = req.headers.get("x-forwarded-for") || "unknown";
-const ua = useragent.parse(req.headers.get("user-agent") || "");
-
-await saveVisit({
-  time: new Date().toISOString(),
-  ip,
-  url: postUrl,
-  browser: ua.toAgent(),
-  os: ua.os.toString(),
-  device: ua.device.toString(),
-});
 import { HTTPError } from "@/lib/errors";
 import { makeErrorResponse, makeSuccessResponse } from "@/lib/http";
 import { INSTAGRAM_CONFIGS } from "@/features/instagram/constants";
@@ -21,44 +8,51 @@ import {
   fetchAndNormalizeInstagramMedia,
   isValidInstagramURL,
 } from "@/features/instagram/utils";
+import UAParser from "ua-parser-js";
 
 export async function GET(request: Request) {
   if (!INSTAGRAM_CONFIGS.enableServerAPI) {
-    const notImplementedResponse = makeErrorResponse("Not Implemented");
-    return NextResponse.json(notImplementedResponse, { status: 501 });
+    return NextResponse.json(makeErrorResponse("Not Implemented"), { status: 501 });
   }
 
   const postUrl = new URL(request.url).searchParams.get("postUrl");
   if (!postUrl) {
-    const badRequestResponse = makeErrorResponse("Post URL is required");
-    return NextResponse.json(badRequestResponse, { status: 400 });
+    return NextResponse.json(makeErrorResponse("Post URL is required"), { status: 400 });
   }
 
   const err = isValidInstagramURL(postUrl);
   if (err) {
-    const invalidResponse = makeErrorResponse(err);
-    return NextResponse.json(invalidResponse, { status: 400 });
+    return NextResponse.json(makeErrorResponse(err), { status: 400 });
   }
+
+  // Extract client info
+  const ip = request.headers.get("x-forwarded-for") || "unknown";
+  const uaHeader = request.headers.get("user-agent") || "";
+  const parser = new UAParser(uaHeader);
+  const uaResult = parser.getResult();
+
+  // Save visit
+  await saveVisit({
+    time: new Date().toISOString(),
+    ip,
+    url: postUrl,
+    browser: uaResult.browser.name || "unknown",
+    os: uaResult.os.name || "unknown",
+    device: uaResult.device.model || uaResult.device.type || "unknown",
+  });
 
   try {
     const items = await fetchAndNormalizeInstagramMedia(postUrl);
 
     if (!items || items.length === 0) {
-      const notFound = makeErrorResponse("No downloadable media found");
-      return NextResponse.json(notFound, { status: 404 });
+      return NextResponse.json(makeErrorResponse("No downloadable media found"), { status: 404 });
     }
 
-    const response = makeSuccessResponse({ items });
-    return NextResponse.json(response, { status: 200 });
+    return NextResponse.json(makeSuccessResponse({ items }), { status: 200 });
   } catch (error: any) {
     if (error instanceof HTTPError) {
-      const httpErrorResponse = makeErrorResponse(error.message);
-      return NextResponse.json(httpErrorResponse, { status: error.status });
+      return NextResponse.json(makeErrorResponse(error.message), { status: error.status });
     }
-
-    const unknownErrorResponse = makeErrorResponse(
-      error?.message || "Unable to fetch Instagram media"
-    );
-    return NextResponse.json(unknownErrorResponse, { status: 500 });
+    return NextResponse.json(makeErrorResponse(error?.message || "Unable to fetch Instagram media"), { status: 500 });
   }
 }

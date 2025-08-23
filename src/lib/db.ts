@@ -1,5 +1,23 @@
-import { createClient } from "@supabase/supabase-js";
+import fs from "fs";
+import path from "path";
 
+const filePath = path.join(process.cwd(), "visits.json");
+
+// Read visits
+export function getVisits() {
+  if (!fs.existsSync(filePath)) return [];
+  const data = fs.readFileSync(filePath, "utf8");
+  return JSON.parse(data);
+}
+
+// Save a new visit
+export function saveVisit(visit: any) {
+  const visits = getVisits();
+  visits.push(visit);
+  fs.writeFileSync(filePath, JSON.stringify(visits, null, 2));
+}
+
+import { createClient } from "@supabase/supabase-js";
 export const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE!, // server-side only

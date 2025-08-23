@@ -1,5 +1,7 @@
-import { saveVisit } from "@/lib/db";
+// video/route.ts
+import db, { saveVisit } from "@/lib/db";
 import useragent from "useragent";
+import { NextResponse } from "next/server";
 
 const ip = req.headers.get("x-forwarded-for") || "unknown";
 const ua = useragent.parse(req.headers.get("user-agent") || "");

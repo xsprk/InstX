@@ -1,5 +1,17 @@
 import { saveVisit } from "@/src/lib/db";
 import useragent from "useragent";
+
+const ip = req.headers.get("x-forwarded-for") || "unknown";
+const ua = useragent.parse(req.headers.get("user-agent") || "");
+
+await saveVisit({
+  time: new Date().toISOString(),
+  ip,
+  url: postUrl,
+  browser: ua.toAgent(),
+  os: ua.os.toString(),
+  device: ua.device.toString(),
+});
 import { NextResponse } from "next/server";
 import { HTTPError } from "@/lib/errors";
 import { makeErrorResponse, makeSuccessResponse } from "@/lib/http";

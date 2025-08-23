@@ -3,14 +3,13 @@ import { PrismaClient } from "@prisma/client";
 import fs from "fs";
 import path from "path";
 
-// Prisma client (still available for other DB operations)
-const db = new PrismaClient();
-export default db;
+// Prisma client (for future DB use)
+export const db = new PrismaClient();
 
-// File path inside /data folder
+// File path for local visits storage
 const filePath = path.join(process.cwd(), "data", "visits.json");
 
-// helper to read JSON file safely
+// Helper to read JSON safely
 function readJson(file: string): any[] {
   if (!fs.existsSync(file)) return [];
   try {
@@ -22,13 +21,13 @@ function readJson(file: string): any[] {
   }
 }
 
-// helper to write JSON file safely
+// Helper to write JSON safely
 function writeJson(file: string, data: any[]) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
 }
 
-// Save a visit into /data/visits.json
+// Save a visit to /data/visits.json
 export async function saveVisitData(row: any) {
   const data = readJson(filePath);
   data.push(row);
@@ -36,7 +35,7 @@ export async function saveVisitData(row: any) {
   return row;
 }
 
-// Get all visits from /data/visits.json
+// Get all visits
 export async function getVisitsData() {
   return readJson(filePath);
 }

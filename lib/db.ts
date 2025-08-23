@@ -6,7 +6,7 @@ import path from "path";
 const filePath = path.join(process.cwd(), "data", "visits.json");
 
 // Read visits
-export async function getVisitsData() {
+export async function getVisits() {
   if (!fs.existsSync(filePath)) return [];
   try {
     const raw = fs.readFileSync(filePath, "utf8");
@@ -18,10 +18,12 @@ export async function getVisitsData() {
 }
 
 // Save a visit
-export async function saveVisitData(row: any) {
-  const data = await getVisitsData();
+export async function saveVisit(row: any) {
+  const data = await getVisits();
   data.push(row);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
   return row;
 }
+
+// ⚠️ NO default export

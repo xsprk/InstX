@@ -2,10 +2,9 @@
 import fs from "fs";
 import path from "path";
 
-// File path for storing visits
 const filePath = path.join(process.cwd(), "data", "visits.json");
 
-// Read visits
+// Get all visits
 export async function getVisits() {
   if (!fs.existsSync(filePath)) return [];
   try {
@@ -17,7 +16,7 @@ export async function getVisits() {
   }
 }
 
-// Save a visit
+// Save a new visit
 export async function saveVisit(row: any) {
   const data = await getVisits();
   data.push(row);
@@ -25,5 +24,3 @@ export async function saveVisit(row: any) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
   return row;
 }
-
-// ⚠️ NO default export

@@ -1,4 +1,4 @@
-import { InstagramVideoForm } from "@/features/instagram/components/form";
+import InstagramVideoForm from "@/features/instagram/components/form";
 
 export default function HomePage() {
   return (
